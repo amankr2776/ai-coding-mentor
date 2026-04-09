@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCodeFeedback } from '@/app/actions/ai';
 import { hindsight } from '@/lib/hindsight';
-import { executePiston } from '@/lib/piston';
+import { executeCode } from '@/lib/judge0';
 
 export const maxDuration = 60;
 
@@ -16,18 +16,22 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    console.log(`[API Submit] Protocol initiated for ${language} using Piston...`);
+    console.log(`[API Submit] Protocol initiated for ${language} using Judge0...`);
     
     // Step 1: Real Execution to get raw output
     const mainTestCase = problem.testCases?.[0] || { input: "", expectedOutput: "" };
-    const execution = await executePiston(language, code, mainTestCase.input || '');
+    const execution = await executeCode(code, language, mainTestCase.input || '');
+    
+    // Normalize outputs for comparison
+    const actualOutput = (execution.stdout || '').trim();
+    const expectedOutput = (mainTestCase.expectedOutput || '').trim();
     
     const testResults = [{
-      passed: (execution.stdout || '').trim() === (mainTestCase.expectedOutput || '').trim(),
+      passed: actualOutput === expectedOutput,
       input: mainTestCase.input,
       expectedOutput: mainTestCase.expectedOutput,
       actualOutput: execution.stdout,
-      error: execution.stderr
+      error: execution.stderr || execution.compile_output
     }];
 
     // Step 2: Deep Logic Assessment via Action

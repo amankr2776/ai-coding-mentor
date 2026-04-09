@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { executePiston } from '@/lib/piston';
+import { executeCode } from '@/lib/judge0';
 
 export async function POST(req: Request) {
   try {
@@ -9,8 +9,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Code and language are required.' }, { status: 400 });
     }
 
-    console.log(`[API Execute] Route handling ${language} via Piston...`);
-    const result = await executePiston(language, code, input || '');
+    console.log(`[API Execute] Route handling ${language} via Judge0...`);
+    const result = await executeCode(code, language, input || '');
 
     return NextResponse.json(result);
   } catch (error: any) {

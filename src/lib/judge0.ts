@@ -1,38 +1,74 @@
 import { callGroq } from "./ai";
 
+const JUDGE0_URL = "https://judge0-ce.p.rapidapi.com";
+const RAPIDAPI_KEY = process.env.JUDGE0_API_KEY;
+
+const languageIdMap: Record<string, number> = {
+  "Python": 71,
+  "JavaScript": 63,
+  "TypeScript": 74,
+  "Java": 62,
+  "C++": 54,
+  "C": 50,
+  "C#": 51,
+  "Go": 60,
+  "Rust": 73,
+  "PHP": 68,
+  "Ruby": 72,
+  "Swift": 83,
+  "Kotlin": 78,
+  "SQL": 82
+};
+
 /**
- * Pure Groq-based Neural Simulation Gateway.
- * Mentally executes code and returns raw output, eliminating the need for external compilers.
+ * Executes code via Judge0 API (RapidAPI).
+ * Provides real-time execution results for 14+ languages.
  */
 export const executeCode = async (code: string, language: string, stdin: string = '') => {
   try {
-    const systemPrompt = "You are a highly precise code execution engine. You mentally simulate code execution and return ONLY the raw output (stdout). No explanation, no markdown.";
-    const userPrompt = `Execute this ${language} code with the provided input. 
-Input: ${stdin || 'None'}
-Code:
-${code}
+    const languageId = languageIdMap[language] || 71;
 
-Return ONLY the exact raw string output. If the code would crash, return 'ERROR: [reason]'.`;
+    console.log(`[Judge0] Requesting execution for ${language} (ID: ${languageId})...`);
 
-    const output = await callGroq(userPrompt, systemPrompt, false);
-    
-    // Clean up any AI conversational noise if it slipped through
-    let cleanedOutput = output.trim();
-    if (cleanedOutput.startsWith('```')) {
-      cleanedOutput = cleanedOutput.replace(/```[a-z]*\n?|```/g, '').trim();
+    const response = await fetch(`${JUDGE0_URL}/submissions?base64_encoded=false&wait=true`, {
+      method: "POST",
+      headers: {
+        "x-rapidapi-key": RAPIDAPI_KEY || "",
+        "x-rapidapi-host": "judge0-ce.p.rapidapi.com",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        source_code: code,
+        language_id: languageId,
+        stdin: stdin
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Judge0 API Error: ${errText}`);
     }
 
-    const isError = cleanedOutput.startsWith('ERROR:');
-    
+    const data = await response.json();
+
+    // Normalize output: Judge0 uses 'Accepted' (id: 3) for success
     return {
-      stdout: isError ? '' : cleanedOutput,
-      stderr: isError ? cleanedOutput : '',
-      output: cleanedOutput,
-      compile_output: '',
-      status: { id: isError ? 4 : 3, description: isError ? 'Runtime Error' : 'Success' }
+      stdout: data.stdout || "",
+      stderr: data.stderr || "",
+      compile_output: data.compile_output || "",
+      output: (data.stdout || "") + (data.stderr || "") + (data.compile_output || ""),
+      status: data.status || { id: 3, description: "Accepted" }
     };
-  } catch (e: any) {
-    console.error("[Neural Simulator] Failure:", e.message);
-    return { stdout: '', stderr: 'Neural simulation failed.', output: '', compile_output: '', status: { id: 4, description: 'Simulation Failed' } };
+  } catch (error: any) {
+    console.error("[Judge0] Execution failed:", error.message);
+    
+    // Fallback to Neural Simulation if API fails (Optional, but here we return structured error)
+    return { 
+      stdout: '', 
+      stderr: `Execution failed: ${error.message}`, 
+      output: '', 
+      compile_output: '', 
+      status: { id: 4, description: 'Execution Failed' } 
+    };
   }
 };
